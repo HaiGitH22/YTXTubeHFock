@@ -14,11 +14,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudOff
@@ -51,11 +53,6 @@ import kotlinx.coroutines.launch
 @Stable
 class FeedState(
     private val scope: CoroutineScope,
-    
-
-
-
-
     private val freshOnRefresh: Boolean = false,
     private val loader: suspend (next: String?) -> FeedPage,
 ) {
@@ -117,10 +114,6 @@ class FeedState(
             loading = false
         }
     }
-
-    
-
-
 
     private suspend fun loadFresh(): FeedPage {
         val first = loader(null)
@@ -189,13 +182,9 @@ class LibraryData(scope: CoroutineScope) {
 }
 
 
-
-
-
-
 @Composable
-fun rememberScrollToTop(signal: Int): LazyListState {
-    val state = rememberLazyListState()
+fun rememberGridScrollToTop(signal: Int): LazyGridState {
+    val state = rememberLazyGridState()
     val initial = remember { signal }
     LaunchedEffect(signal) { if (signal != initial) state.animateScrollToItem(0) }
     return state
@@ -207,25 +196,23 @@ fun FeedList(
     feed: FeedState,
     contentPadding: PaddingValues,
     onOpen: (VideoItem) -> Unit,
-    header: LazyListScope.() -> Unit = {},
+    header: LazyGridScope.() -> Unit = {},
     scrollToTop: Int = 0,
     pullToRefresh: Boolean = true,
-
     indicatorTop: Dp = 0.dp,
-
     videos: List<VideoItem>? = null,
-
     filterScrollKey: Any? = null,
-
     channelAvatarSeed: Map<String, String?> = emptyMap(),
 ) {
     val c = MaterialTheme.colorScheme
     val listVideos = videos ?: feed.videos
     val scope = rememberCoroutineScope()
+    
     LaunchedEffect(listVideos, channelAvatarSeed) {
         ChannelAvatars.resolve(scope, listVideos, channelAvatarSeed)
     }
-    val list = rememberScrollToTop(scrollToTop)
+    
+    val list = rememberGridScrollToTop(scrollToTop)
 
     LaunchedEffect(feed.generation, filterScrollKey) { list.scrollToItem(0) }
     val nearEnd by remember {
@@ -235,39 +222,44 @@ fun FeedList(
         }
     }
     LaunchedEffect(nearEnd, listVideos.size) { if (nearEnd && listVideos.isNotEmpty()) feed.loadMore() }
+    
     PullToRefresh(enabled = pullToRefresh, refreshing = feed.refreshing, onRefresh = feed::refresh, topPadding = indicatorTop) {
-    LazyColumn(state = list, contentPadding = contentPadding) {
-        header()
-        items(listVideos, key = { it.id }) { video ->
-            VideoCard(
-                video,
-                onClick = { onOpen(video) },
-                modifier = Modifier.animateItem(),
-            )
-        }
-        when {
-
-
-            feed.error != null && listVideos.isEmpty() -> item {
-                EmptyState(
-                    icon = Icons.Rounded.CloudOff,
-                    title = "Couldn't load this",
-                    body = feed.error.orEmpty(),
-                    action = { PillButton("Try again", { feed.refresh() }) },
+        LazyVerticalGrid(
+            state = list,
+            columns = GridCells.Adaptive(minSize = 340.dp),
+            contentPadding = contentPadding,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            header()
+            
+            items(listVideos, key = { it.id }) { video ->
+                VideoCard(
+                    video,
+                    onClick = { onOpen(video) },
+                    modifier = Modifier.animateItem(),
                 )
             }
-            feed.loading || feed.hasMore -> item {
-                Box(Modifier.fillMaxWidth().padding(28.dp), Alignment.Center) {
-                    CircularProgressIndicator(color = c.primary, strokeWidth = 4.dp, modifier = Modifier.size(32.dp))
+            
+            when {
+                feed.error != null && listVideos.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
+                    EmptyState(
+                        icon = Icons.Rounded.CloudOff,
+                        title = "Couldn't load this",
+                        body = feed.error.orEmpty(),
+                        action = { PillButton("Try again", { feed.refresh() }) },
+                    )
+                }
+                feed.loading || feed.hasMore -> item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(Modifier.fillMaxWidth().padding(28.dp), Alignment.Center) {
+                        CircularProgressIndicator(color = c.primary, strokeWidth = 4.dp, modifier = Modifier.size(32.dp))
+                    }
                 }
             }
         }
     }
-    }
 }
-
-
-
 
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
